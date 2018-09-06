@@ -1529,5 +1529,5 @@ class JournalTest(UnittestMixin, unittest.TestCase):
         self._assert_raises_with_message(
             exceptions.DoesNotExist,
             'cannot remove component "aop" from bundle: the component does not exist',
-            journal.remove_ahead_of_print_bundle
+            journal.remove_ahead_of_print_bundle,
         )
