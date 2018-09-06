@@ -186,8 +186,7 @@ class FetchChangeUnitTest(unittest.TestCase):
         restfulapi.put_document(self.request)
         self.assertEqual(len(restfulapi.fetch_changes(self.request)["results"]), 1)
         changes_ids = [
-            change["id"]
-            for change in restfulapi.fetch_changes(self.request)["results"]
+            change["id"] for change in restfulapi.fetch_changes(self.request)["results"]
         ]
         self.assertIn("/documents/0000-0000-23-24-2231", changes_ids)
 
@@ -212,5 +211,6 @@ class FetchChangeUnitTest(unittest.TestCase):
         self.request.GET["since"] = since
         self.request.GET["limit"] = 5
 
-        self.assertEqual(restfulapi.fetch_changes(self.request)["results"],
-                         changes[10:15])
+        self.assertEqual(
+            restfulapi.fetch_changes(self.request)["results"], changes[10:15]
+        )
