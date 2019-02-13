@@ -1,7 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from documentstore import adapters, domain, exceptions
+from documentstore import adapters, domain, exceptions, interfaces
+from . import apptesting
 
 
 class StoreTestMixin:
@@ -93,3 +94,25 @@ class DocumentsStoreTest(StoreTestMixin, unittest.TestCase):
 
     Adapter = adapters.DocumentStore
     DomainClass = domain.Document
+
+
+class SessionTestMixin:
+    """Testa a interface de `interfaces.Session`. Qualquer classe que implementar
+    a interface mencionada deverá acompanhar um conjunto de testes que herdam
+    deste mixin, conforme o exemplo:
+
+        class AppTestingSessionTests(SessionTestMixin, inittest.TestCase):
+            Session = apptesting.Session
+    """
+
+    def test_documents_attribute(self):
+        session = self.Session()
+        self.assertIsInstance(session.documents, interfaces.DataStore)
+
+    def test_documents_bundles_attribute(self):
+        session = self.Session()
+        self.assertIsInstance(session.documents_bundles, interfaces.DataStore)
+
+
+class AppTestingSessionTests(SessionTestMixin, unittest.TestCase):
+    Session = apptesting.Session
