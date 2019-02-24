@@ -32,6 +32,9 @@ class MongoDB:
     def changes(self):
         return self._collection("changes")
 
+    def create_indexes(self):
+        self.changes.create_index([("timestamp", pymongo.ASCENDING)], background=False)
+
 
 class Session(interfaces.Session):
     def __init__(self, mongodb_client):
@@ -94,23 +97,16 @@ class ChangesStore(interfaces.ChangesDataStore):
         self._collection = collection
 
     def add(self, change: dict):
-        change["_id"] = change["timestamp"]
-        try:
-            self._collection.insert_one(change)
-        except pymongo.errors.DuplicateKeyError:
-            raise exceptions.AlreadyExists(
-                "cannot add data with id "
-                '"%s": the id is already in use' % change["_id"]
-            ) from None
+        assert "_id" not in change
+        assert "timestamp" in change
+        self._collection.insert_one(change)
 
     def filter(self, since: str = "", limit: int = 500):
-        changes = self._collection.find({"_id": {"$gte": since}}).limit(limit)
-
-        def _clean_result(c):
-            _ = c.pop("_id", None)
-            return c
-
-        return (_clean_result(c) for c in changes)
+        return self._collection.find(
+            {"timestamp": {"$gte": since}},
+            sort=[("timestamp", pymongo.ASCENDING)],
+            projection={"_id": False},
+        ).limit(limit)
 
 
 class DocumentStore(BaseStore):

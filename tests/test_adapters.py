@@ -183,8 +183,7 @@ class AppTestingSessionTests(SessionTestMixin, unittest.TestCase):
 
 
 class MongoClientStub:
-    def collection(self, colname):
-        return None
+    documents = documents_bundles = changes = journals = None
 
 
 class SessionTests(SessionTestMixin, unittest.TestCase):
@@ -210,7 +209,7 @@ class ChangesStoreTestMixin:
         store = self.Store()
 
         self.assertRaises(
-            KeyError,
+            AssertionError,
             store.add,
             {
                 "seq": "2018-08-05T23:03:44.971230Z",
@@ -219,7 +218,7 @@ class ChangesStoreTestMixin:
             },
         )
 
-    def test_add_raises_error_when_timestamp_already_exists(self):
+    def test_add_doesnt_raise_error_when_timestamp_already_exists(self):
         store = self.Store()
 
         store.add(
@@ -230,14 +229,14 @@ class ChangesStoreTestMixin:
             }
         )
 
-        self.assertRaises(
-            exceptions.AlreadyExists,
-            store.add,
-            {
-                "timestamp": "2018-08-05T23:03:44.971230Z",
-                "id": "0034-8910-rsp-48-2-0347",
-                "entity": "document",
-            },
+        self.assertIsNone(
+            store.add(
+                {
+                    "timestamp": "2018-08-05T23:03:44.971230Z",
+                    "id": "0034-8910-rsp-48-2-0347",
+                    "entity": "document",
+                }
+            )
         )
 
     def test_filter_returns_empty_list(self):

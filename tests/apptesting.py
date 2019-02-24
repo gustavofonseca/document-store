@@ -1,4 +1,5 @@
 from collections import OrderedDict
+import itertools
 
 from documentstore import interfaces, exceptions, domain
 
@@ -105,52 +106,30 @@ def document_registry_data_fixture(prefix=""):
 
 class InMemoryChangesDataStore(interfaces.ChangesDataStore):
     def __init__(self):
-        self._data_store = OrderedDict()
+        self._collection = MongoDBCollectionStub()
 
     def add(self, change: dict):
-
-        if change["timestamp"] in self._data_store:
-            raise exceptions.AlreadyExists()
-        else:
-            self._data_store[change["timestamp"]] = change
+        assert "timestamp" in change
+        self._collection.insert_one(change)
 
     def filter(self, since: str = "", limit: int = 500):
-
-        first = 0
-        for i, change_key in enumerate(self._data_store):
-            if self._data_store[change_key]["timestamp"] < since:
-                continue
-            else:
-                first = i
-                break
-
-        return list(self._data_store.values())[first:limit]
+        return self._collection.find({"timestamp": {"$gte": since}}).limit(limit)
 
 
 class MongoDBCollectionStub:
     def __init__(self):
-        self._mongo_store = OrderedDict()
+        self._mongo_store = []
 
     def insert_one(self, data):
-        import pymongo
+        self._mongo_store.append(data)
 
-        if data["_id"] in self._mongo_store:
-            raise pymongo.errors.DuplicateKeyError("")
-        else:
-            self._mongo_store[data["_id"]] = data
-
-    def find(self, query):
-        since = query["_id"]["$gte"]
-
-        first = 0
-        for i, change_key in enumerate(self._mongo_store):
-            if self._mongo_store[change_key]["_id"] < since:
-                continue
-            else:
-                first = i
-                break
-
-        return SliceResultStub(list(self._mongo_store.values())[first:])
+    def find(self, query, sort=None, projection=None):
+        since = query["timestamp"]["$gte"]
+        return SliceResultStub(
+            list(
+                itertools.dropwhile(lambda x: x["timestamp"] < since, self._mongo_store)
+            )
+        )
 
 
 class SliceResultStub:
