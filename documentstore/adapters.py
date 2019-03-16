@@ -60,6 +60,20 @@ class MongoDB:
     def _collection(self, colname):
         return self._db()[colname]
 
+    def start_session(self):
+        return self._client.start_session()
+
+    def start_transaction(self):
+        return self._client.start_transaction()
+
+    def initdb(self):
+        """Cria as coleções na base de dados.
+        
+        Com o uso de transações as coleções não podem ser criadas implicitamente.
+        """
+        for colname in ["documents", "documents_bundles", "journals", "changes"]:
+            self._client.create_collection(colname)
+
     @property
     def documents(self):
         return self._collection("documents")
@@ -84,22 +98,40 @@ class Session(interfaces.Session):
 
     def __init__(self, mongodb_client):
         self._mongodb_client = mongodb_client
+        self._txn_session = None
+
+    def __enter__(self):
+        self._txn_session = self._mongodb_client.start_session()
+        self._txn_session.start_transaction()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type:
+            self._txn_session.abort_transaction()
+        else:
+            self._txn_session.commit_transaction()
 
     @property
     def documents(self):
-        return DocumentStore(self._mongodb_client.documents)
+        return DocumentStore(
+            self._mongodb_client.documents, txn_session=self._txn_session
+        )
 
     @property
     def documents_bundles(self):
-        return DocumentsBundleStore(self._mongodb_client.documents_bundles)
+        return DocumentsBundleStore(
+            self._mongodb_client.documents_bundles, txn_session=self._txn_session
+        )
 
     @property
     def journals(self):
-        return JournalStore(self._mongodb_client.journals)
+        return JournalStore(
+            self._mongodb_client.journals, txn_session=self._txn_session
+        )
 
     @property
     def changes(self):
-        return ChangesStore(self._mongodb_client.changes)
+        return ChangesStore(self._mongodb_client.changes, txn_session=self._txn_session)
 
 
 class BaseStore(interfaces.DataStore):
@@ -108,8 +140,15 @@ class BaseStore(interfaces.DataStore):
     implementam/definem o atributo `DomainClass`.
     """
 
-    def __init__(self, collection):
+    def __init__(self, collection, txn_session=None):
         self._collection = collection
+        self._txn_session = txn_session
+
+    def _txn_session_arg(self):
+        if self._txn_session:
+            return {"session": self._txn_session}
+        else:
+            return {}
 
     def _pre_write(self, data) -> dict:
         """Tratamento anterior ao armazenamento do dado no MongoDB."""
@@ -125,7 +164,7 @@ class BaseStore(interfaces.DataStore):
     def add(self, data) -> None:
         try:
             _, _manifest = self._pre_write(data)
-            self._collection.insert_one(_manifest)
+            self._collection.insert_one(_manifest, **self._txn_session_arg())
         except pymongo.errors.DuplicateKeyError:
             raise exceptions.AlreadyExists(
                 "cannot add data with id " '"%s": the id is already in use' % data.id()
@@ -133,14 +172,16 @@ class BaseStore(interfaces.DataStore):
 
     def update(self, data) -> None:
         _id, _manifest = self._pre_write(data)
-        result = self._collection.replace_one({"_id": _id}, _manifest)
+        result = self._collection.replace_one(
+            {"_id": _id}, _manifest, **self._txn_session_arg()
+        )
         if result.matched_count == 0:
             raise exceptions.DoesNotExist(
                 "cannot update data with id " '"%s": data does not exist' % data.id()
             )
 
     def fetch(self, id: str):
-        manifest = self._collection.find_one({"_id": id})
+        manifest = self._collection.find_one({"_id": id}, **self._txn_session_arg())
         if manifest:
             return self.DomainClass(manifest=self._post_read(manifest))
         else:
@@ -154,13 +195,20 @@ class ChangesStore(interfaces.ChangesDataStore):
     MongoDB.
     """
 
-    def __init__(self, collection):
+    def __init__(self, collection, txn_session=None):
         self._collection = collection
+        self._txn_session = txn_session
+
+    def _txn_session_arg(self):
+        if self._txn_session:
+            return {"session": self._txn_session}
+        else:
+            return {}
 
     def add(self, change: dict):
         change["_id"] = change["timestamp"]
         try:
-            self._collection.insert_one(change)
+            self._collection.insert_one(change, **self._txn_session_arg())
         except pymongo.errors.DuplicateKeyError:
             raise exceptions.AlreadyExists(
                 "cannot add data with id "

@@ -59,16 +59,21 @@ class BaseRegisterDocument(CommandHandler):
             assets = dict(assets)
         except TypeError:
             assets = {}
-        session = self.Session()
-        document = self._get_document(session, id)
-        document.new_version(data_url)
-        for asset_id, asset_url in assets.items():
-            document.new_asset_version(asset_id, asset_url)
-        self._persist(session, document)
-        self._notify(
-            session,
-            {"document": document, "id": id, "data_url": data_url, "assets": assets},
-        )
+        with self.Session() as session:
+            document = self._get_document(session, id)
+            document.new_version(data_url)
+            for asset_id, asset_url in assets.items():
+                document.new_asset_version(asset_id, asset_url)
+            self._persist(session, document)
+            self._notify(
+                session,
+                {
+                    "document": document,
+                    "id": id,
+                    "data_url": data_url,
+                    "assets": assets,
+                },
+            )
 
 
 class RegisterDocument(BaseRegisterDocument):
